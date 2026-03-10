@@ -1,0 +1,27 @@
+{
+  "name": "critic",
+  "version": "1.0.0",
+  "description": "My own worst critic: LLM powered multi-agent debate for better planning.",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/1shooperman/critic.git"
+  },
+  "keywords": [
+    "llm",
+    "ai",
+    "agent",
+    "critic",
+    "pattern",
+    "multi-agent"
+  ],
+  "author": "brandon.shoop@gmail.com",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/1shooperman/critic/issues"
+  },
+  "homepage": "https://github.com/1shooperman/critic#readme"
+}
