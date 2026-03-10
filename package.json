@@ -2,9 +2,17 @@
   "name": "critic",
   "version": "1.0.0",
   "description": "My own worst critic: LLM powered multi-agent debate for better planning.",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
-    "test": "jest"
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
+    "lint": "biome lint ./src",
+    "format": "biome format --write ./src",
+    "typecheck": "tsc --noEmit",
+    "check": "biome check ./src"
   },
   "repository": {
     "type": "git",
@@ -18,10 +26,29 @@
     "pattern",
     "multi-agent"
   ],
-  "author": "brandon.shoop@gmail.com",
+  "author": "brandon@aglflorida.com",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/1shooperman/critic/issues"
   },
-  "homepage": "https://github.com/1shooperman/critic#readme"
+  "homepage": "https://github.com/1shooperman/critic#readme",
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "@langchain/anthropic": "^1.3.22",
+    "@langchain/google-genai": "^2.1.24",
+    "@langchain/openai": "^1.2.12",
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "hono": "^4.12.7",
+    "langchain": "^1.2.30",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.4.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.6",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
 }
