@@ -4,7 +4,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
-import { getPromptSet, renderStep } from "./prompts";
+import { getPromptSet, renderStep, stepLabel, stepText } from "./prompts";
 
 const CRITIC_SYSTEM_PROMPT =
   "You are a rigorous critic and devil's advocate. Your role is to challenge assumptions, " +
@@ -48,7 +48,7 @@ export async function runChain({
     }
   }
 
-  const prompts = promptFile.steps.map((step) => renderStep(step, variables));
+  const prompts = promptFile.steps.map((step) => renderStep(stepText(step), variables));
 
   if (prompts.length === 0) {
     throw new Error("prompts must not be empty");
@@ -56,8 +56,11 @@ export async function runChain({
 
   const llm = resolveModel(model);
   const steps: string[] = [];
+  const total = prompts.length;
 
   for (let i = 0; i < prompts.length; i++) {
+    console.log(`[chain] ${stepLabel(promptFile.steps[i], i)} (${i + 1}/${total})`);
+
     const userContent =
       i === 0 ? prompts[i] : `Previous analysis:\n${steps[i - 1]}\n\n${prompts[i]}`;
 

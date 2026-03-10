@@ -27,10 +27,15 @@ jest.mock("@langchain/google-genai", () => ({
     }),
 }));
 
-jest.mock("../prompts", () => ({
-  getPromptSet: jest.fn(),
-  renderStep: jest.requireActual("../prompts").renderStep,
-}));
+jest.mock("../prompts", () => {
+  const actual = jest.requireActual("../prompts");
+  return {
+    getPromptSet: jest.fn(),
+    renderStep: actual.renderStep,
+    stepText: actual.stepText,
+    stepLabel: actual.stepLabel,
+  };
+});
 
 import { getPromptSet } from "../prompts";
 

@@ -1,12 +1,35 @@
 import { parse } from "yaml";
 
+export type PromptStep = string | { label?: string; prompt: string };
+
 interface PromptFile {
   description?: string;
   variables?: string[];
-  steps: string[];
+  steps: PromptStep[];
+}
+
+export interface PipelineStage {
+  set: string;
+  variables: Record<string, string>;
+}
+
+export interface Pipeline {
+  description?: string;
+  inputs?: string[];
+  stages: PipelineStage[];
 }
 
 const cache = new Map<string, PromptFile>();
+const pipelineCache = new Map<string, Pipeline>();
+
+export function stepText(step: PromptStep): string {
+  return typeof step === "string" ? step : step.prompt;
+}
+
+export function stepLabel(step: PromptStep, index: number): string {
+  if (typeof step === "object" && step.label) return step.label;
+  return `step ${index + 1}`;
+}
 
 export async function loadPrompts(): Promise<void> {
   const token = process.env.GITHUB_TOKEN;
@@ -61,19 +84,31 @@ export async function loadPrompts(): Promise<void> {
     const raw = await fileRes.text();
     const parsed = parse(raw) as unknown;
 
+    const name = entry.name.replace(/\.yaml$/, "");
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "stages" in parsed &&
+      Array.isArray((parsed as { stages: unknown }).stages)
+    ) {
+      pipelineCache.set(name, parsed as Pipeline);
+      console.log(`[prompts] Loaded pipeline "${name}"`);
+      continue;
+    }
+
     if (
       !parsed ||
       typeof parsed !== "object" ||
       !("steps" in parsed) ||
       !Array.isArray((parsed as { steps: unknown }).steps)
     ) {
-      console.warn(`[prompts] ${entry.name} is missing required "steps" array — skipping`);
+      console.warn(`[prompts] ${entry.name} has neither "steps" nor "stages" — skipping`);
       continue;
     }
 
-    const name = entry.name.replace(/\.yaml$/, "");
     cache.set(name, parsed as PromptFile);
-    console.log(`[prompts] Loaded "${name}"`);
+    console.log(`[prompts] Loaded prompt set "${name}"`);
   }
 }
 
@@ -85,8 +120,16 @@ export function getPromptSet(name: string): PromptFile {
   return promptFile;
 }
 
+export function getPipeline(name: string): Pipeline {
+  const pipeline = pipelineCache.get(name);
+  if (!pipeline) {
+    throw new Error(`Unknown pipeline: "${name}"`);
+  }
+  return pipeline;
+}
+
 export function renderStep(template: string, variables: Record<string, string>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_match, key) => {
+  return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (_match, key) => {
     if (!(key in variables)) {
       throw new Error(`Missing variable: "${key}"`);
     }
