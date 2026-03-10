@@ -11,6 +11,7 @@
     "test:coverage": "jest --coverage",
     "lint": "biome lint ./src",
     "format": "biome format --write ./src",
+    "typecheck": "tsc --noEmit",
     "check": "biome check ./src"
   },
   "repository": {
@@ -25,7 +26,7 @@
     "pattern",
     "multi-agent"
   ],
-  "author": "brandon.shoop@gmail.com",
+  "author": "brandon@aglflorida.com",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/1shooperman/critic/issues"

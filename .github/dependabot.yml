@@ -1,0 +1,31 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
+    open-pull-requests-limit: 10
+    groups:
+      langchain:
+        patterns:
+          - "@langchain/*"
+          - "langchain"
+      dev-tooling:
+        patterns:
+          - "@biomejs/*"
+          - "typescript"
+          - "tsx"
+          - "ts-jest"
+          - "@types/*"
+          - "jest"
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Chicago
