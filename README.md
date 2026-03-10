@@ -12,6 +12,7 @@ Designed to run as a Docker container inside a multi-agent platform. Other agent
 - [User Guide](#user-guide)
   - [Prerequisites](#prerequisites)
   - [Configuration](#configuration)
+  - [Prompt Repository](#prompt-repository)
   - [Running with Docker](#running-with-docker)
   - [API Reference](#api-reference)
   - [MCP Reference](#mcp-reference)
@@ -29,12 +30,12 @@ Designed to run as a Docker container inside a multi-agent platform. Other agent
 
 ## How It Works
 
-Critic accepts a model name and an ordered list of prompts. It runs them sequentially through the chosen LLM, each time prepending the previous step's output so the model builds on — and critiques — its own prior reasoning.
+Critic accepts a model name and a named **prompt set** — a YAML file stored in a private GitHub repository. At startup the server fetches all prompt files, parses them, and caches them in memory. Callers reference a set by name and supply template variable values; the server interpolates the steps and runs them sequentially through the chosen LLM, each time prepending the previous step's output so the model builds on — and critiques — its own prior reasoning.
 
 ```
-prompt[0]                                          → output[0]
-"Previous analysis:\n{output[0]}\n\n{prompt[1]}"  → output[1]
-"Previous analysis:\n{output[1]}\n\n{prompt[2]}"  → output[2]
+step[0] (rendered)                                          → output[0]
+"Previous analysis:\n{output[0]}\n\n{step[1]} (rendered)"  → output[1]
+"Previous analysis:\n{output[1]}\n\n{step[2]} (rendered)"  → output[2]
 ...
 ```
 
@@ -66,9 +67,42 @@ ANTHROPIC_API_KEY=sk-ant-...
 OPENAI_API_KEY=sk-...
 GEMINI_API_KEY=AI...
 PORT=3000
+GITHUB_TOKEN=ghp_...
+PROMPTS_REPO_URL=https://github.com/owner/private-prompts-repo
+PROMPTS_REPO_PATH=prompts/
+PROMPTS_BRANCH=main
 ```
 
 `PORT` defaults to `3000` if unset. The host-side port can also be overridden at `make build` time via the `PORT` shell variable (see below).
+
+`GITHUB_TOKEN` must be a fine-grained PAT with `contents: read` on the prompts repository. If either `GITHUB_TOKEN` or `PROMPTS_REPO_URL` is absent the server starts with an empty prompt cache and logs a warning — useful for local development without access to the private repo.
+
+### Prompt Repository
+
+Prompts are stored as YAML files in a private GitHub repository, fetched at startup via the GitHub Contents API. This separates prompt authorship from server code — prompts can be updated by editing the private repo and restarting the container, with no changes to this codebase.
+
+**File format** — one file per named chain, identified by its basename without extension:
+
+```yaml
+# prompts/my-chain.yaml
+description: Optional human-readable description
+variables:        # declared variables — validated at call time
+  - context
+  - team_size
+steps:
+  - |
+    Critique the following: {{context}}
+  - |
+    Given a team of {{team_size}}, what did the previous analysis miss?
+```
+
+- `variables` lists every `{{token}}` name used across all steps. The server throws at call time if any declared variable is absent from the request.
+- Template substitution uses `{{variable_name}}` double-brace syntax.
+- Files must have a `.yaml` extension. At startup, all files under `PROMPTS_REPO_PATH` are fetched and parsed; file names without the extension become the prompt set names.
+
+**Adding or updating a prompt chain:** edit the YAML file in the private repo and restart the container. No server code changes required.
+
+---
 
 ### Running with Docker
 
@@ -118,10 +152,11 @@ Content-Type: application/json
 ```jsonc
 {
   "model": "claude-opus-4-6",   // required — see Supported Models
-  "prompts": [                  // required — at least one string
-    "Is microservices always better than a monolith?",
-    "Now steelman the monolith position and identify the three biggest risks in the previous critique."
-  ]
+  "promptSet": "my-chain",      // required — YAML filename without extension
+  "variables": {                // required — values for all declared template variables
+    "context": "Is microservices always better than a monolith?",
+    "team_size": "8"
+  }
 }
 ```
 
@@ -141,32 +176,21 @@ Content-Type: application/json
 
 | Status | Cause |
 |--------|-------|
-| `400`  | Missing or malformed `model` / `prompts` field, or invalid JSON |
-| `500`  | LLM invocation failed (invalid API key, upstream error, etc.) |
+| `400`  | Missing or malformed `model` / `promptSet` / `variables` field, or invalid JSON |
+| `500`  | Unknown prompt set, missing variable, or LLM invocation failure |
 
-**Single-prompt example**
+**Example**
 
 ```bash
 curl -X POST http://localhost:3000/ \
   -H "Content-Type: application/json" \
   -d '{
     "model": "claude-opus-4-6",
-    "prompts": ["Is microservices always better than monoliths?"]
-  }'
-```
-
-**Multi-step example**
-
-```bash
-curl -X POST http://localhost:3000/ \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "gpt-4o",
-    "prompts": [
-      "Evaluate the claim: daily standups improve team productivity.",
-      "What assumptions in the previous critique are themselves unexamined?",
-      "Synthesize a final position that accounts for all identified weaknesses."
-    ]
+    "promptSet": "my-chain",
+    "variables": {
+      "context": "Is microservices always better than a monolith?",
+      "team_size": "8"
+    }
   }'
 ```
 
@@ -181,7 +205,8 @@ Critic exposes a [Model Context Protocol](https://modelcontextprotocol.io) endpo
 | Field | Type | Description |
 |-------|------|-------------|
 | `model` | `string` | LLM model ID — e.g. `claude-opus-4-6`, `gpt-4o`, `gemini-2.0-flash` |
-| `prompts` | `string[]` | Ordered list of prompts. Minimum 1. |
+| `promptSet` | `string` | Name of the prompt chain (YAML filename without extension) |
+| `variables` | `Record<string, string>` | Template variable values. Defaults to `{}`. |
 
 **MCP JSON-RPC example**
 
@@ -196,7 +221,10 @@ curl -X POST http://localhost:3000/mcp \
       "name": "critique",
       "arguments": {
         "model": "claude-opus-4-6",
-        "prompts": ["Should every startup pursue venture capital funding?"]
+        "promptSet": "my-chain",
+        "variables": {
+          "context": "Should every startup pursue venture capital funding?"
+        }
       }
     }
   }'
@@ -229,11 +257,13 @@ Passing an unsupported prefix returns HTTP `500` with the message `Unknown model
 ```
 critic/
 ├── src/
+│   ├── prompts.ts         # GitHub fetch, YAML parse, template rendering
 │   ├── chain.ts           # Core chain logic and model routing
 │   ├── server.ts          # Hono app: POST / and MCP /mcp routes
-│   ├── index.ts           # Entry point — starts the Node HTTP server
+│   ├── index.ts           # Entry point — loadPrompts() then serve()
 │   └── __tests__/
-│       └── chain.test.ts  # Jest unit tests for chain.ts
+│       ├── chain.test.ts  # Jest unit tests for chain.ts
+│       └── prompts.test.ts # Jest unit tests for prompts.ts
 ├── dist/                  # Compiled output (generated by tsc, git-ignored)
 ├── Dockerfile             # Multi-stage build (builder → production)
 ├── docker-compose.yml
@@ -272,26 +302,32 @@ tsx --env-file=.env watch src/index.ts
 ```
 ┌─────────────────────────────────────────┐
 │  src/index.ts                           │
-│  @hono/node-server  →  createApp()      │
+│  loadPrompts() → @hono/node-server      │
 └────────────────┬────────────────────────┘
                  │
-        ┌────────▼────────┐
-        │  src/server.ts  │
-        │  Hono app       │
-        │                 │
-        │  POST /         │  ← direct HTTP
-        │  ALL  /mcp      │  ← MCP Streamable HTTP (stateless)
-        └────────┬────────┘
+        ┌────────▼────────┐      ┌──────────────────────┐
+        │  src/server.ts  │      │  src/prompts.ts       │
+        │  Hono app       │      │                       │
+        │                 │      │  loadPrompts()        │  ← GitHub Contents API
+        │  POST /         │  ←   │  getPromptSet()       │  ← in-memory cache
+        │  ALL  /mcp      │      │  renderStep()         │  ← {{variable}} substitution
+        └────────┬────────┘      └──────────────────────┘
                  │
         ┌────────▼────────┐
         │  src/chain.ts   │
         │                 │
         │  resolveModel() │  ← routes prefix → LangChain class
-        │  runChain()     │  ← sequential prompt loop
+        │  runChain()     │  ← validates variables, renders steps, sequential loop
         └─────────────────┘
 ```
 
 **Key design decisions:**
+
+- **Prompts fetched at startup, not per-request.** `loadPrompts()` runs once before the server accepts connections. All prompt files are cached in memory. This keeps request latency low and avoids GitHub API rate limits during normal operation. To pick up prompt changes, restart the container.
+
+- **Prompt authorship decoupled from server code.** YAML files live in a private GitHub repository. Updating a prompt chain requires only a file edit in that repo plus a container restart — no changes to this codebase.
+
+- **`{{variable}}` substitution, no template engine.** Double-brace tokens are replaced with a single regex pass. Declared variables are validated before the chain runs; a missing variable throws immediately rather than silently producing a malformed prompt.
 
 - **No growing message history.** Each LLM call receives exactly two messages: the fixed system prompt and a single `HumanMessage`. The previous step's output is injected as plain text at the top of the next human turn. This keeps token usage predictable and avoids context-window blowout across long chains.
 
@@ -319,15 +355,28 @@ npm run test:coverage
 
 **Test coverage**
 
+`chain.test.ts`
+
 | Test | What it validates |
 |------|-------------------|
 | `resolveModel("claude-*")` | Returns a `ChatAnthropic` instance |
 | `resolveModel("gpt-*")` | Returns a `ChatOpenAI` instance |
 | `resolveModel("gemini-*")` | Returns a `ChatGoogleGenerativeAI` instance |
 | `resolveModel("unknown-*")` | Throws with the unknown prefix |
-| Single-prompt chain | Returns `{ final, steps }` with one entry |
-| Two-prompt chain | Second LLM call includes first output in its message |
-| Empty prompts | Throws `"prompts must not be empty"` |
+| Single-step chain | Returns `{ final, steps }` with one entry |
+| Two-step chain | Second LLM call includes first output in its message |
+| Missing declared variable | Throws before any LLM call |
+
+`prompts.test.ts`
+
+| Test | What it validates |
+|------|-------------------|
+| `renderStep` — all variables present | Correct substitution |
+| `renderStep` — missing variable | Throws with the variable name |
+| `renderStep` — no tokens | Returns template unchanged |
+| `getPromptSet` — unknown name | Throws with the set name |
+| `loadPrompts` — env vars absent | Logs warning, returns cleanly |
+| `loadPrompts` — mocked fetch | Cache populated with parsed YAML |
 
 **Adding tests**
 
