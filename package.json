@@ -23,5 +23,10 @@
   "bugs": {
     "url": "https://github.com/1shooperman/critic/issues"
   },
-  "homepage": "https://github.com/1shooperman/critic#readme"
+  "homepage": "https://github.com/1shooperman/critic#readme",
+  "dependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "jest": "^30.3.0",
+    "langchain": "^1.2.30"
+  }
 }
