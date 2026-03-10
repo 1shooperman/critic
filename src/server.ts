@@ -9,22 +9,30 @@ import { runChain } from "./chain";
 export function createApp(): Hono {
   const app = new Hono();
 
+  const httpSchema = z.object({
+    model: z.string(),
+    promptSet: z.string(),
+    variables: z.record(z.string(), z.string()).default({}),
+  });
+
   // Direct HTTP endpoint
   app.post("/", async (c) => {
-    let body: { model: string; prompts: string[] };
+    let raw: unknown;
     try {
-      body = await c.req.json();
+      raw = await c.req.json();
     } catch {
       throw new HTTPException(400, { message: "Invalid JSON body" });
     }
 
-    const { model, prompts } = body;
-    if (!model || !Array.isArray(prompts)) {
-      throw new HTTPException(400, { message: '"model" and "prompts" are required' });
+    const parsed = httpSchema.safeParse(raw);
+    if (!parsed.success) {
+      throw new HTTPException(400, { message: '"model", "promptSet", and "variables" are required' });
     }
 
+    const { model, promptSet, variables } = parsed.data;
+
     try {
-      const result = await runChain({ model, prompts });
+      const result = await runChain({ model, promptSet, variables });
       return c.json(result);
     } catch (err) {
       throw new HTTPException(500, {
@@ -39,14 +47,15 @@ export function createApp(): Hono {
   mcpServer.registerTool(
     "critique",
     {
-      description: "Run a multi-step critic chain against one or more prompts",
+      description: "Run a multi-step critic chain using a named prompt set",
       inputSchema: {
         model: z.string().describe("e.g. claude-opus-4-6 or gpt-4o"),
-        prompts: z.array(z.string()).min(1),
+        promptSet: z.string().describe("Name of the prompt chain (YAML filename without extension)"),
+        variables: z.record(z.string(), z.string()).describe("Template variable values").default({}),
       },
     },
-    async ({ model, prompts }) => {
-      const result = await runChain({ model, prompts });
+    async ({ model, promptSet, variables }) => {
+      const result = await runChain({ model, promptSet, variables });
       return { content: [{ type: "text" as const, text: result.final }] };
     }
   );

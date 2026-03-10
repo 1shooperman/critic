@@ -27,10 +27,20 @@ jest.mock("@langchain/google-genai", () => ({
     }),
 }));
 
+jest.mock("../prompts", () => ({
+  getPromptSet: jest.fn(),
+  renderStep: jest.requireActual("../prompts").renderStep,
+}));
+
+import { getPromptSet } from "../prompts";
+
+const mockGetPromptSet = getPromptSet as jest.MockedFunction<typeof getPromptSet>;
+
 // --- tests ---
 
 beforeEach(() => {
   mockInvoke.mockReset();
+  mockGetPromptSet.mockReset();
 });
 
 describe("resolveModel", () => {
@@ -55,32 +65,47 @@ describe("resolveModel", () => {
 });
 
 describe("runChain", () => {
-  it("returns final and steps for a single prompt", async () => {
+  it("returns final and steps for a single-step prompt set", async () => {
+    mockGetPromptSet.mockReturnValue({ steps: ["Critique this: {{context}}"] });
     mockInvoke.mockResolvedValueOnce({ content: "mocked" });
 
-    const result = await runChain({ model: "claude-opus-4-6", prompts: ["Test prompt"] });
+    const result = await runChain({
+      model: "claude-opus-4-6",
+      promptSet: "my-chain",
+      variables: { context: "some input" },
+    });
 
     expect(result).toEqual({ final: "mocked", steps: ["mocked"] });
     expect(mockInvoke).toHaveBeenCalledTimes(1);
   });
 
-  it("injects previous output into the second prompt", async () => {
+  it("injects previous output into the second step", async () => {
+    mockGetPromptSet.mockReturnValue({ steps: ["Step 1: {{context}}", "Step 2: {{question}}"] });
     mockInvoke
       .mockResolvedValueOnce({ content: "first output" })
       .mockResolvedValueOnce({ content: "second output" });
 
-    await runChain({ model: "claude-opus-4-6", prompts: ["Prompt 1", "Prompt 2"] });
+    await runChain({
+      model: "claude-opus-4-6",
+      promptSet: "my-chain",
+      variables: { context: "ctx", question: "q" },
+    });
 
     expect(mockInvoke).toHaveBeenCalledTimes(2);
     const secondCallMessages = mockInvoke.mock.calls[1][0];
     const humanMessage = secondCallMessages[1];
     expect(humanMessage.content).toContain("first output");
-    expect(humanMessage.content).toContain("Prompt 2");
+    expect(humanMessage.content).toContain("Step 2: q");
   });
 
-  it("throws when prompts is empty", async () => {
-    await expect(runChain({ model: "claude-opus-4-6", prompts: [] })).rejects.toThrow(
-      "prompts must not be empty"
-    );
+  it("throws when a declared variable is missing", async () => {
+    mockGetPromptSet.mockReturnValue({
+      variables: ["context"],
+      steps: ["Critique: {{context}}"],
+    });
+
+    await expect(
+      runChain({ model: "claude-opus-4-6", promptSet: "my-chain", variables: {} })
+    ).rejects.toThrow('Missing required variable: "context"');
   });
 });
