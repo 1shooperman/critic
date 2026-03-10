@@ -88,6 +88,10 @@ PROMPTS_BRANCH=main
 
 `GITHUB_TOKEN` must be a fine-grained PAT with `contents: read` on the prompts repository. If either `GITHUB_TOKEN` or `PROMPTS_REPO_URL` is absent the server starts with an empty prompt cache and logs a warning — useful for local development without access to the private repo.
 
+### Security and deployment
+
+This service has **no built-in authentication**. HTTP and MCP endpoints are unauthenticated by design. It is intended for trusted or internal use only (e.g. inside a multi-agent platform or mesh). When deploying, use network controls (e.g. network policy, API gateway, mTLS) or run the service in a segment that is not exposed to untrusted callers. For vulnerability reporting and API key handling, see [SECURITY.md](SECURITY.md).
+
 ### Prompt Repository
 
 Prompts and pipelines are stored as YAML files in a private GitHub repository, fetched at startup via the GitHub Contents API. This separates prompt authorship from server code — prompts and pipelines can be updated by editing the private repo and restarting the container, with no changes to this codebase.
