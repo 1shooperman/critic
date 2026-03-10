@@ -14,7 +14,7 @@ Please report them privately via GitHub's built-in security advisory feature:
 2. Click **"Report a vulnerability"**.
 3. Fill in the details and submit.
 
-You will receive a response within **72 hours** acknowledging receipt. We aim to triage and release a fix within **14 days** for high-severity issues, and **30 days** for lower-severity ones. We will keep you informed of progress throughout.
+I aim to triage and release a fix within **14 days** for high-severity issues, and **30 days** for lower-severity ones. We will keep you informed of progress throughout.
 
 ## Scope
 
