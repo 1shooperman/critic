@@ -52,49 +52,60 @@ export function createApp(): Hono {
     }
   });
 
-  // MCP endpoint
-  const mcpServer = new McpServer({ name: "critic", version: "1.0.0" });
-
-  mcpServer.registerTool(
-    "critique",
-    {
-      description: "Run a named prompt set as a single multi-step chain",
-      inputSchema: {
-        model: z.string().describe("e.g. claude-opus-4-6 or gpt-4o"),
-        promptSet: z.string().describe("Name of the prompt chain (YAML filename without extension)"),
-        variables: z.record(z.string(), z.string()).describe("Template variable values").default({}),
+  // MCP endpoint. Stateless mode requires a new transport (and server) per request;
+  // reusing one transport throws "Stateless transport cannot be reused across requests."
+  function createMcpServer(): McpServer {
+    const server = new McpServer({ name: "critic", version: "1.0.0" });
+    server.registerTool(
+      "critique",
+      {
+        description: "Run a named prompt set as a single multi-step chain",
+        inputSchema: {
+          model: z.string().describe("e.g. claude-opus-4-6 or gpt-4o"),
+          promptSet: z.string().describe("Name of the prompt chain (YAML filename without extension)"),
+          variables: z.record(z.string(), z.string()).describe("Template variable values").default({}),
+        },
       },
-    },
-    async ({ model, promptSet, variables }) => {
-      const result = await runChain({ model, promptSet, variables });
-      return { content: [{ type: "text" as const, text: result.final }] };
-    }
-  );
-
-  mcpServer.registerTool(
-    "critique_pipeline",
-    {
-      description: "Run an ordered pipeline of prompt sets, wiring outputs between stages",
-      inputSchema: {
-        model: z.string().describe("e.g. claude-opus-4-6 or gpt-4o"),
-        pipeline: z.string().describe("Name of the pipeline (YAML filename without extension)"),
-        variables: z.record(z.string(), z.string()).describe("Top-level input variable values").default({}),
+      async ({ model, promptSet, variables }) => {
+        const result = await runChain({ model, promptSet, variables });
+        return { content: [{ type: "text" as const, text: result.final }] };
+      }
+    );
+    server.registerTool(
+      "critique_pipeline",
+      {
+        description: "Run an ordered pipeline of prompt sets, wiring outputs between stages",
+        inputSchema: {
+          model: z.string().describe("e.g. claude-opus-4-6 or gpt-4o"),
+          pipeline: z.string().describe("Name of the pipeline (YAML filename without extension)"),
+          variables: z.record(z.string(), z.string()).describe("Top-level input variable values").default({}),
+        },
       },
-    },
-    async ({ model, pipeline, variables }) => {
-      const result = await runPipeline({ model, pipelineName: pipeline, variables });
-      return { content: [{ type: "text" as const, text: result.final }] };
-    }
-  );
-
-  const transport = new WebStandardStreamableHTTPServerTransport({
-    sessionIdGenerator: undefined, // stateless
-  });
-
-  mcpServer.connect(transport);
+      async ({ model, pipeline, variables }) => {
+        const result = await runPipeline({ model, pipelineName: pipeline, variables });
+        return { content: [{ type: "text" as const, text: result.final }] };
+      }
+    );
+    return server;
+  }
 
   app.all("/mcp", async (c) => {
-    return transport.handleRequest(c.req.raw);
+    try {
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: undefined, // stateless
+      });
+      const mcpServer = createMcpServer();
+      mcpServer.connect(transport);
+      return transport.handleRequest(c.req.raw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[MCP] request failed:", message, err);
+      return c.json(
+        { jsonrpc: "2.0", error: { code: -32603, message }, id: null },
+        500,
+        { "Content-Type": "application/json" }
+      );
+    }
   });
 
   return app;
