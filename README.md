@@ -32,7 +32,7 @@ Designed to run as a Docker container inside a multi-agent platform. Other agent
 
 Critic supports two modes:
 
-**Prompt set** — a single named YAML file containing an ordered list of steps. Steps run sequentially through the chosen LLM; each step receives the previous step's output prepended as context.
+**Prompt set** — a single named YAML file containing an ordered list of steps. Steps run sequentially through the chosen LLM; each step receives the **immediately previous** step's output prepended as context. Later steps do not see earlier steps (e.g. step 3 sees only step 2's output, not step 1's). This keeps token usage bounded and encourages summarization; when authoring multi-step prompts, design each step to build on the previous one or to pass along the needed context.
 
 ```
 step[0] (rendered)                                          → output[0]
@@ -431,7 +431,7 @@ tsx --env-file=.env watch src/index.ts
 
 - **`{{variable}}` substitution, no template engine.** Double-brace tokens are replaced with a single regex pass. Spaces around the variable name are optional. Declared variables are validated before execution; a missing variable throws immediately.
 
-- **No growing message history.** Each LLM call receives exactly two messages: the fixed system prompt and a single `HumanMessage`. The previous step's output is injected as plain text at the top of the next human turn. This keeps token usage predictable and avoids context-window blowout across long chains.
+- **No growing message history.** Each LLM call receives exactly two messages: the fixed system prompt and a single `HumanMessage`. Only the immediately previous step's output is injected as plain text at the top of the next human turn (earlier steps are not accumulated). This keeps token usage predictable and avoids context-window blowout across long chains.
 
 - **Stateless MCP transport.** `WebStandardStreamableHTTPServerTransport` is used with `sessionIdGenerator: undefined`. Every request is self-contained — no server-side session state. This is the correct mode for containerized, horizontally scalable deployments.
 

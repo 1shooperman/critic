@@ -61,6 +61,7 @@ export async function runChain({
   for (let i = 0; i < prompts.length; i++) {
     console.log(`[chain] ${stepLabel(promptFile.steps[i], i)} (${i + 1}/${total})`);
 
+    // Only the immediately previous step is passed; earlier steps are not included (see README).
     const userContent =
       i === 0 ? prompts[i] : `Previous analysis:\n${steps[i - 1]}\n\n${prompts[i]}`;
 
