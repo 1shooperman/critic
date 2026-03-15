@@ -4,6 +4,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
+import type { RunLogger } from "./runLogger";
 import { getPromptSet, renderStep, stepLabel, stepText } from "./prompts";
 
 const CRITIC_SYSTEM_PROMPT =
@@ -33,10 +34,14 @@ export async function runChain({
   model,
   promptSet,
   variables,
+  runLogger,
+  stageName,
 }: {
   model: string;
   promptSet: string;
   variables: Record<string, string>;
+  runLogger?: RunLogger;
+  stageName?: string;
 }): Promise<ChainOutput> {
   const promptFile = getPromptSet(promptSet);
 
@@ -61,6 +66,7 @@ export async function runChain({
   for (let i = 0; i < prompts.length; i++) {
     console.log(`[chain] ${stepLabel(promptFile.steps[i], i)} (${i + 1}/${total})`);
 
+    // Only the immediately previous step is passed; earlier steps are not included (see README).
     const userContent =
       i === 0 ? prompts[i] : `Previous analysis:\n${steps[i - 1]}\n\n${prompts[i]}`;
 
@@ -75,6 +81,7 @@ export async function runChain({
         : JSON.stringify(response.content);
 
     steps.push(text);
+    runLogger?.appendStep(stageName, i, stepLabel(promptFile.steps[i], i), userContent, text);
   }
 
   return { final: steps[steps.length - 1], steps };

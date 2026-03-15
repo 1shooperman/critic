@@ -47,6 +47,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "PERSONA",
       variables: { tech_stack: "TypeScript" },
+      runLogger: undefined,
+      stageName: "PERSONA",
     });
 
     // Stage 2: PERSONA output wired in
@@ -54,6 +56,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "INGEST",
       variables: { persona: "persona output", raw_input: "review my plan" },
+      runLogger: undefined,
+      stageName: "INGEST",
     });
 
     // Stage 3: INGEST output wired in
@@ -61,6 +65,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "CRITIC",
       variables: { subject: "ingest output" },
+      runLogger: undefined,
+      stageName: "CRITIC",
     });
 
     expect(result.final).toBe("critic output");
@@ -83,6 +89,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "INGEST",
       variables: { source: "cursor", raw_input: "my ask" },
+      runLogger: undefined,
+      stageName: "INGEST",
     });
   });
 
@@ -105,5 +113,65 @@ describe("runPipeline", () => {
     await expect(
       runPipeline({ model: "claude-opus-4-6", pipelineName: "test", variables: {} })
     ).rejects.toThrow('Unresolved pipeline variable: "NONEXISTENT"');
+  });
+
+  it("satisfies each stage required variables when pipeline mirrors engineering-review", async () => {
+    // Pipeline and variable mapping mirror critic-prompts engineering-review.yaml.
+    // Each stage's prompt set declares specific variables; resolveStageVars must supply them.
+    const requiredBySet: Record<string, string[]> = {
+      PERSONA: ["tech_stack"],
+      INGEST: ["raw_input", "source", "persona", "plan_input"],
+      CRITIC: ["subject"],
+      UNKNOWNS: ["plan", "verdict"],
+    };
+
+    mockGetPipeline.mockReturnValue({
+      inputs: ["tech_stack", "user_ask", "plan"],
+      stages: [
+        { set: "PERSONA", variables: { tech_stack: "{{ tech_stack }}" } },
+        {
+          set: "INGEST",
+          variables: {
+            persona: "{{ PERSONA }}",
+            raw_input: "{{ user_ask }}",
+            source: "cursor",
+            plan_input: "{{ plan }}",
+          },
+        },
+        { set: "CRITIC", variables: { subject: "{{ INGEST }}" } },
+        {
+          set: "UNKNOWNS",
+          variables: { plan: "{{ plan }}", verdict: "{{ CRITIC }}" },
+        },
+      ],
+    });
+
+    mockRunChain
+      .mockResolvedValueOnce({ final: "persona out", steps: ["persona out"] })
+      .mockResolvedValueOnce({ final: "ingest out", steps: ["ingest out"] })
+      .mockResolvedValueOnce({ final: "critic out", steps: ["critic out"] })
+      .mockResolvedValueOnce({ final: "unknowns out", steps: ["unknowns out"] });
+
+    await runPipeline({
+      model: "gemini-2.5-flash",
+      pipelineName: "engineering-review",
+      variables: {
+        tech_stack: "Vue, Laravel",
+        user_ask: "review my plan",
+        plan: "Step 1. Do X.",
+      },
+    });
+
+    expect(mockRunChain).toHaveBeenCalledTimes(4);
+    for (let i = 0; i < 4; i++) {
+      const call = mockRunChain.mock.calls[i];
+      const promptSet = call[0].promptSet;
+      const variables = call[0].variables;
+      const required = requiredBySet[promptSet];
+      for (const key of required) {
+        expect(variables).toHaveProperty(key);
+        expect(typeof variables[key]).toBe("string");
+      }
+    }
   });
 });

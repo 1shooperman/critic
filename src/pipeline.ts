@@ -1,4 +1,5 @@
 import { type ChainOutput, runChain } from "./chain";
+import type { RunLogger } from "./runLogger";
 import { getPipeline } from "./prompts";
 
 function resolveStageVars(
@@ -22,10 +23,12 @@ export async function runPipeline({
   model,
   pipelineName,
   variables,
+  runLogger,
 }: {
   model: string;
   pipelineName: string;
   variables: Record<string, string>;
+  runLogger?: RunLogger;
 }): Promise<ChainOutput> {
   const pipeline = getPipeline(pipelineName);
 
@@ -46,7 +49,14 @@ export async function runPipeline({
     console.log(`[pipeline] Stage ${i + 1}/${total}: ${stage.set}`);
 
     const resolvedVars = resolveStageVars(stage.variables, variables, stageOutputs);
-    const result = await runChain({ model, promptSet: stage.set, variables: resolvedVars });
+    runLogger?.appendStage(stage.set, resolvedVars);
+    const result = await runChain({
+      model,
+      promptSet: stage.set,
+      variables: resolvedVars,
+      runLogger,
+      stageName: stage.set,
+    });
 
     stageOutputs[stage.set] = result.final;
     stageResults.push(result.final);
