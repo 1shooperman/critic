@@ -86,6 +86,8 @@ describe("loadPrompts", () => {
   afterEach(() => {
     process.env = originalEnv;
     jest.restoreAllMocks();
+    // Re-apply console silence so loadPrompts logs do not appear in subsequent tests.
+    jest.spyOn(console, "log").mockImplementation(() => {});
   });
 
   it("returns without fetching when GITHUB_TOKEN is absent", async () => {
