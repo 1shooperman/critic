@@ -88,6 +88,8 @@ PROMPTS_BRANCH=main
 
 `GITHUB_TOKEN` must be a fine-grained PAT with `contents: read` on the prompts repository. If either `GITHUB_TOKEN` or `PROMPTS_REPO_URL` is absent the server starts with an empty prompt cache and logs a warning — useful for local development without access to the private repo.
 
+**Run logging.** Set `CRITIC_LOG_RUNS=1` (or any truthy value) to write one log file per pipeline or chain run under `logs/`. Filenames are `{date}-{hash}.log` (e.g. `logs/2025-03-15-e0a3c0.log`), where the hash is 6 hex chars derived from the run start time. Each file contains step-by-step inputs and outputs for manual inspection; every line is prefixed with `[hash][datetime][step]` for grep/filtering.
+
 ### Security and deployment
 
 This service has **no built-in authentication**. HTTP and MCP endpoints are unauthenticated by design. It is intended for trusted or internal use only (e.g. inside a multi-agent platform or mesh). When deploying, use network controls (e.g. network policy, API gateway, mTLS) or run the service in a segment that is not exposed to untrusted callers. For vulnerability reporting and API key handling, see [SECURITY.md](SECURITY.md).

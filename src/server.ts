@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { runChain } from "./chain";
 import { runPipeline } from "./pipeline";
+import { RunLogger } from "./runLogger";
 
 export function createApp(): Hono {
   const app = new Hono();
@@ -41,9 +42,12 @@ export function createApp(): Hono {
     }
 
     try {
+      const runLogger = process.env.CRITIC_LOG_RUNS
+        ? new RunLogger()
+        : undefined;
       const result = pipeline
-        ? await runPipeline({ model, pipelineName: pipeline, variables })
-        : await runChain({ model, promptSet: promptSet ?? "", variables });
+        ? await runPipeline({ model, pipelineName: pipeline, variables, runLogger })
+        : await runChain({ model, promptSet: promptSet ?? "", variables, runLogger });
       return c.json(result);
     } catch (err) {
       throw new HTTPException(500, {
@@ -67,7 +71,8 @@ export function createApp(): Hono {
         },
       },
       async ({ model, promptSet, variables }) => {
-        const result = await runChain({ model, promptSet, variables });
+        const runLogger = process.env.CRITIC_LOG_RUNS ? new RunLogger() : undefined;
+        const result = await runChain({ model, promptSet, variables, runLogger });
         return { content: [{ type: "text" as const, text: result.final }] };
       }
     );
@@ -82,7 +87,13 @@ export function createApp(): Hono {
         },
       },
       async ({ model, pipeline, variables }) => {
-        const result = await runPipeline({ model, pipelineName: pipeline, variables });
+        const runLogger = process.env.CRITIC_LOG_RUNS ? new RunLogger() : undefined;
+        const result = await runPipeline({
+          model,
+          pipelineName: pipeline,
+          variables,
+          runLogger,
+        });
         return { content: [{ type: "text" as const, text: result.final }] };
       }
     );

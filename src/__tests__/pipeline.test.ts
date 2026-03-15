@@ -47,6 +47,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "PERSONA",
       variables: { tech_stack: "TypeScript" },
+      runLogger: undefined,
+      stageName: "PERSONA",
     });
 
     // Stage 2: PERSONA output wired in
@@ -54,6 +56,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "INGEST",
       variables: { persona: "persona output", raw_input: "review my plan" },
+      runLogger: undefined,
+      stageName: "INGEST",
     });
 
     // Stage 3: INGEST output wired in
@@ -61,6 +65,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "CRITIC",
       variables: { subject: "ingest output" },
+      runLogger: undefined,
+      stageName: "CRITIC",
     });
 
     expect(result.final).toBe("critic output");
@@ -83,6 +89,8 @@ describe("runPipeline", () => {
       model: "claude-opus-4-6",
       promptSet: "INGEST",
       variables: { source: "cursor", raw_input: "my ask" },
+      runLogger: undefined,
+      stageName: "INGEST",
     });
   });
 

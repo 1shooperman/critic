@@ -4,6 +4,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
+import type { RunLogger } from "./runLogger";
 import { getPromptSet, renderStep, stepLabel, stepText } from "./prompts";
 
 const CRITIC_SYSTEM_PROMPT =
@@ -33,10 +34,14 @@ export async function runChain({
   model,
   promptSet,
   variables,
+  runLogger,
+  stageName,
 }: {
   model: string;
   promptSet: string;
   variables: Record<string, string>;
+  runLogger?: RunLogger;
+  stageName?: string;
 }): Promise<ChainOutput> {
   const promptFile = getPromptSet(promptSet);
 
@@ -76,6 +81,7 @@ export async function runChain({
         : JSON.stringify(response.content);
 
     steps.push(text);
+    runLogger?.appendStep(stageName, i, stepLabel(promptFile.steps[i], i), userContent, text);
   }
 
   return { final: steps[steps.length - 1], steps };
