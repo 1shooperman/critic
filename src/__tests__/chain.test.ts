@@ -71,12 +71,14 @@ describe("resolveModel", () => {
 
 describe("runChain", () => {
   it("returns final and steps for a single-step prompt set", async () => {
-    mockGetPromptSet.mockReturnValue({ steps: ["Critique this: {{context}}"] });
+    mockGetPromptSet.mockReturnValue({ system: "SYSTEM", steps: ["Critique this: {{context}}"] });
     mockInvoke.mockResolvedValueOnce({ content: "mocked" });
 
     const result = await runChain({
       model: "claude-opus-4-6",
       promptSet: "my-chain",
+      system: "SYSTEM",
+      runStartedAt: new Date("2026-03-18T00:00:00.000Z"),
       variables: { context: "some input" },
     });
 
@@ -85,7 +87,10 @@ describe("runChain", () => {
   });
 
   it("injects previous output into the second step", async () => {
-    mockGetPromptSet.mockReturnValue({ steps: ["Step 1: {{context}}", "Step 2: {{question}}"] });
+    mockGetPromptSet.mockReturnValue({
+      system: "SYSTEM",
+      steps: ["Step 1: {{context}}", "Step 2: {{question}}"],
+    });
     mockInvoke
       .mockResolvedValueOnce({ content: "first output" })
       .mockResolvedValueOnce({ content: "second output" });
@@ -93,6 +98,8 @@ describe("runChain", () => {
     await runChain({
       model: "claude-opus-4-6",
       promptSet: "my-chain",
+      system: "SYSTEM",
+      runStartedAt: new Date("2026-03-18T00:00:00.000Z"),
       variables: { context: "ctx", question: "q" },
     });
 
@@ -105,12 +112,38 @@ describe("runChain", () => {
 
   it("throws when a declared variable is missing", async () => {
     mockGetPromptSet.mockReturnValue({
+      system: "SYSTEM",
       variables: ["context"],
       steps: ["Critique: {{context}}"],
     });
 
     await expect(
-      runChain({ model: "claude-opus-4-6", promptSet: "my-chain", variables: {} })
+      runChain({
+        model: "claude-opus-4-6",
+        promptSet: "my-chain",
+        system: "SYSTEM",
+        runStartedAt: new Date("2026-03-18T00:00:00.000Z"),
+        variables: {},
+      })
     ).rejects.toThrow('Missing required variable: "context"');
+  });
+
+  it("prepends current system time to the SystemMessage", async () => {
+    mockGetPromptSet.mockReturnValue({ system: "PERSONA", steps: ["Step 1: {{context}}"] });
+    mockInvoke.mockResolvedValueOnce({ content: "mocked" });
+
+    const runStartedAt = new Date("2026-03-18T12:34:56.000Z");
+    await runChain({
+      model: "claude-opus-4-6",
+      promptSet: "my-chain",
+      system: "PERSONA",
+      runStartedAt,
+      variables: { context: "ctx" },
+    });
+
+    const firstCallMessages = mockInvoke.mock.calls[0][0];
+    const systemMessage = firstCallMessages[0];
+    expect(systemMessage.content).toContain("Current system time: 2026-03-18T12:34:56.000Z");
+    expect(systemMessage.content).toContain("PERSONA");
   });
 });

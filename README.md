@@ -50,9 +50,10 @@ stage[2] (prompt set C, receives output B) → final output C
 ...
 ```
 
-Every LLM invocation uses the same system persona:
+Every LLM invocation includes:
 
-> *"You are a rigorous critic and devil's advocate. Your role is to challenge assumptions, expose logical flaws, identify unstated risks, and argue the strongest counterposition to any claim. Be direct, do not hedge."*
+- A **dynamic system time prefix** injected at run start (e.g. `Current system time: 2026-03-18T12:34:56.000Z`), and
+- A **system persona** sourced from the prompts repository, derived from a pipeline’s **system stage** (no hardcoded fallback in server code).
 
 The response always includes both the `final` output and all intermediate `steps`, so callers can inspect the full reasoning chain.
 
@@ -105,6 +106,12 @@ All files under `PROMPTS_REPO_PATH` are loaded in a single pass. The file type i
 
 File names without the `.yaml` extension become the names callers reference.
 
+**Local override.** For local development (or to bypass the separate prompts repo), start the server with `--prompts <dir>` to load `.yaml` files directly from a directory on disk (instead of GitHub):
+
+```bash
+npm run dev -- --prompts ./prompts
+```
+
 ---
 
 #### Prompt set format
@@ -112,6 +119,8 @@ File names without the `.yaml` extension become the names callers reference.
 ```yaml
 # my-chain.yaml
 description: Optional human-readable description
+system: |           # system persona used when running this prompt set directly (required for direct runs)
+  You are ...
 variables:        # declared variables — validated at call time
   - input
   - context
@@ -141,6 +150,7 @@ inputs:           # top-level variables the caller must supply
   - var_b
 stages:
   - set: some-chain
+    role: system  # exactly one stage must be marked as the system prompt chain
     variables:
       input: "{{ var_a }}"
   - set: another-chain

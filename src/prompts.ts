@@ -1,15 +1,19 @@
+import fs from "node:fs/promises";
+import path from "node:path";
 import { parse } from "yaml";
 
 export type PromptStep = string | { label?: string; prompt: string };
 
 interface PromptFile {
   description?: string;
+  system?: string;
   variables?: string[];
   steps: PromptStep[];
 }
 
 export interface PipelineStage {
   set: string;
+  role?: "system";
   variables: Record<string, string>;
 }
 
@@ -22,6 +26,45 @@ export interface Pipeline {
 const cache = new Map<string, PromptFile>();
 const pipelineCache = new Map<string, Pipeline>();
 
+async function loadPromptsFromLocalDir(dir: string): Promise<void> {
+  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const yamlFiles = entries
+    .filter((e) => e.isFile() && e.name.endsWith(".yaml"))
+    .map((e) => e.name);
+
+  for (const filename of yamlFiles) {
+    const filePath = path.join(dir, filename);
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = parse(raw) as unknown;
+
+    const name = filename.replace(/\.yaml$/, "");
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "stages" in parsed &&
+      Array.isArray((parsed as { stages: unknown }).stages)
+    ) {
+      pipelineCache.set(name, parsed as Pipeline);
+      console.log(`[prompts] Loaded pipeline "${name}"`);
+      continue;
+    }
+
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      !("steps" in parsed) ||
+      !Array.isArray((parsed as { steps: unknown }).steps)
+    ) {
+      console.warn(`[prompts] ${filename} has neither "steps" nor "stages" — skipping`);
+      continue;
+    }
+
+    cache.set(name, parsed as PromptFile);
+    console.log(`[prompts] Loaded prompt set "${name}"`);
+  }
+}
+
 export function stepText(step: PromptStep): string {
   return typeof step === "string" ? step : step.prompt;
 }
@@ -31,7 +74,12 @@ export function stepLabel(step: PromptStep, index: number): string {
   return `step ${index + 1}`;
 }
 
-export async function loadPrompts(): Promise<void> {
+export async function loadPrompts(options?: { localDir?: string }): Promise<void> {
+  if (options?.localDir) {
+    await loadPromptsFromLocalDir(options.localDir);
+    return;
+  }
+
   const token = process.env.GITHUB_TOKEN;
   const repoUrl = process.env.PROMPTS_REPO_URL;
 

@@ -1,0 +1,2 @@
+I need you to expand the test suite, 
+add a linter, type checks for typescript, and a build / compile for quick checking

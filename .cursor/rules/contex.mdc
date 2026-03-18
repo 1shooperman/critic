@@ -1,0 +1,8 @@
+---
+description: local rules that apply to this codebase
+alwaysApply: true
+---
+
+- Don't make assumptions around: how prompts get here. That can be inferred from the codebase.
+- There should be no default / fallback prompts. We consider the prompts IP, so we house them separately.
+- Pipelines must designate exactly one stage with `role: system`; the system persona is derived from that stage's prompt set (no hardcoded system persona fallback).

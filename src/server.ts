@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { runChain } from "./chain";
 import { runPipeline } from "./pipeline";
+import { getPromptSet } from "./prompts";
 import { RunLogger } from "./runLogger";
 
 export function createApp(): Hono {
@@ -47,7 +48,21 @@ export function createApp(): Hono {
         : undefined;
       const result = pipeline
         ? await runPipeline({ model, pipelineName: pipeline, variables, runLogger })
-        : await runChain({ model, promptSet: promptSet ?? "", variables, runLogger });
+        : await (async () => {
+            const setName = promptSet ?? "";
+            const promptFile = getPromptSet(setName);
+            if (!promptFile.system) {
+              throw new Error(`Prompt set "${setName}" is missing required "system" prompt`);
+            }
+            return await runChain({
+              model,
+              promptSet: setName,
+              system: promptFile.system,
+              runStartedAt: new Date(),
+              variables,
+              runLogger,
+            });
+          })();
       return c.json(result);
     } catch (err) {
       throw new HTTPException(500, {
@@ -72,7 +87,18 @@ export function createApp(): Hono {
       },
       async ({ model, promptSet, variables }) => {
         const runLogger = process.env.CRITIC_LOG_RUNS ? new RunLogger() : undefined;
-        const result = await runChain({ model, promptSet, variables, runLogger });
+        const promptFile = getPromptSet(promptSet);
+        if (!promptFile.system) {
+          throw new Error(`Prompt set "${promptSet}" is missing required "system" prompt`);
+        }
+        const result = await runChain({
+          model,
+          promptSet,
+          system: promptFile.system,
+          runStartedAt: new Date(),
+          variables,
+          runLogger,
+        });
         return { content: [{ type: "text" as const, text: result.final }] };
       }
     );
