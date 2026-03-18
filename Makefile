@@ -22,3 +22,6 @@ start:
 
 stop:
 	docker stop $(CONTAINER)
+
+fake-plan:
+	./tests/run_fake_plan.sh
