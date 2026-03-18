@@ -2,31 +2,47 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+ENV_FILE="$ROOT_DIR/.env"
 PLAN_FILE="${1:-$SCRIPT_DIR/FAKE_PLAN.md}"
+
+if [[ -f "$ENV_FILE" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "$ENV_FILE"
+  set +a
+fi
 
 if [[ ! -f "$PLAN_FILE" ]]; then
   echo "Plan file not found: $PLAN_FILE" >&2
   exit 1
 fi
 
-CRITIC_URL="${CRITIC_URL:-http://localhost:3000/}"
+PORT="${PORT:-3000}"
+CRITIC_URL="${CRITIC_URL:-http://localhost:${PORT}/}"
 CRITIC_MODEL="${CRITIC_MODEL:-gpt-4o-mini}"
 CRITIC_PIPELINE="${CRITIC_PIPELINE:-engineering-review}"
 CRITIC_TECH_STACK="${CRITIC_TECH_STACK:-TypeScript, Node.js, React}"
 CRITIC_USER_ASK="${CRITIC_USER_ASK:-Please review this implementation plan and return actionable, plan-specific feedback.}"
 
 request_body="$(
-  node -e 'const fs=require("fs"); const plan=fs.readFileSync(process.argv[1],"utf8");
+  node -e 'const fs=require("fs"); const [planFile, model, pipeline, techStack, userAsk] = process.argv.slice(1);
+const plan=fs.readFileSync(planFile,"utf8");
 const body={
-  model: process.env.CRITIC_MODEL,
-  pipeline: process.env.CRITIC_PIPELINE,
+  model,
+  pipeline,
   variables: {
-    tech_stack: process.env.CRITIC_TECH_STACK,
-    user_ask: process.env.CRITIC_USER_ASK,
+    tech_stack: techStack,
+    user_ask: userAsk,
     plan
   }
 };
-process.stdout.write(JSON.stringify(body));' "$PLAN_FILE"
+process.stdout.write(JSON.stringify(body));' \
+    "$PLAN_FILE" \
+    "$CRITIC_MODEL" \
+    "$CRITIC_PIPELINE" \
+    "$CRITIC_TECH_STACK" \
+    "$CRITIC_USER_ASK"
 )"
 
 echo "Sending fake plan to $CRITIC_URL"
