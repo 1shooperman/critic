@@ -26,5 +26,5 @@ start:
 stop:
 	docker stop $(CONTAINER)
 
-fake-plan:
-	./tests/run_fake_plan.sh
+test:
+	./tests/test_harness.sh
