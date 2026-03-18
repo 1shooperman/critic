@@ -1,4 +1,7 @@
 import { getPromptSet, loadPrompts, renderStep, stepLabel, stepText } from "../prompts";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 // --- stepText ---
 
@@ -165,5 +168,23 @@ describe("loadPrompts", () => {
     expect(stepText(promptFile.steps[0])).toBe("Critique: {{subject}}\n");
     expect(stepLabel(promptFile.steps[0], 0)).toBe("critique");
     expect(stepLabel(promptFile.steps[1], 1)).toBe("synthesize");
+  });
+
+  it("loads prompt YAMLs from a local directory when localDir is provided", async () => {
+    delete process.env.GITHUB_TOKEN;
+    delete process.env.PROMPTS_REPO_URL;
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "critic-prompts-"));
+    await fs.writeFile(
+      path.join(tmpDir, "local.yaml"),
+      ["variables:", "  - subject", "steps:", '  - "Critique: {{subject}}"', ""].join("\n"),
+      "utf8"
+    );
+
+    await loadPrompts({ localDir: tmpDir });
+
+    const promptFile = getPromptSet("local");
+    expect(promptFile.steps).toEqual(["Critique: {{subject}}"]);
+    expect(promptFile.variables).toEqual(["subject"]);
   });
 });

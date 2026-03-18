@@ -7,11 +7,6 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 import type { RunLogger } from "./runLogger";
 import { getPromptSet, renderStep, stepLabel, stepText } from "./prompts";
 
-const CRITIC_SYSTEM_PROMPT =
-  "You are a rigorous critic and devil's advocate. Your role is to challenge assumptions, " +
-  "expose logical flaws, identify unstated risks, and argue the strongest counterposition to " +
-  "any claim. Be direct, do not hedge.";
-
 export interface ChainOutput {
   final: string;
   steps: string[];
@@ -33,12 +28,16 @@ export function resolveModel(model: string): BaseChatModel {
 export async function runChain({
   model,
   promptSet,
+  system,
+  runStartedAt,
   variables,
   runLogger,
   stageName,
 }: {
   model: string;
   promptSet: string;
+  system: string;
+  runStartedAt: Date;
   variables: Record<string, string>;
   runLogger?: RunLogger;
   stageName?: string;
@@ -62,6 +61,7 @@ export async function runChain({
   const llm = resolveModel(model);
   const steps: string[] = [];
   const total = prompts.length;
+  const systemMessageContent = `Current system time: ${runStartedAt.toISOString()}\n\n${system}`;
 
   for (let i = 0; i < prompts.length; i++) {
     console.log(`[chain] ${stepLabel(promptFile.steps[i], i)} (${i + 1}/${total})`);
@@ -71,7 +71,7 @@ export async function runChain({
       i === 0 ? prompts[i] : `Previous analysis:\n${steps[i - 1]}\n\n${prompts[i]}`;
 
     const response = await llm.invoke([
-      new SystemMessage(CRITIC_SYSTEM_PROMPT),
+      new SystemMessage(systemMessageContent),
       new HumanMessage(userContent),
     ]);
 

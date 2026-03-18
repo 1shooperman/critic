@@ -1,0 +1,4 @@
+- Prompts are IP and live outside this repo; don't assume how they arrive (infer from code).
+- No default / fallback prompts in code.
+- Pipelines must mark exactly one stage as `role: system`; the system persona is derived by rendering that prompt set's steps, then used as the SystemMessage for the rest of the pipeline run.
+- Each run captures a single host `runStartedAt` timestamp and injects `Current system time: <ISO8601>` into every LLM call's SystemMessage.
